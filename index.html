@@ -519,7 +519,21 @@ function openSB(d){
   renderReminds(d);
   renderConns(d);
 }
-function closeSB(){saveSB();document.getElementById('sb').classList.remove('open');selId=null;}
+function closeSB(){
+  // 先に保存データ確定、その後でselIdをnullにしてclose
+  if(selId){
+    const nd=nodes.find(n=>n.id===selId);
+    if(nd){
+      nd.title=document.getElementById('sb-ttl').value.trim()||nd.title;
+      nd.body=document.getElementById('sb-body').value;
+      nd.type=document.getElementById('sb-type').value;
+      save();
+    }
+  }
+  selId=null;
+  document.getElementById('sb').classList.remove('open');
+  renderAll(CG);
+}
 function saveSB(){
   if(!selId)return;
   const nd=nodes.find(n=>n.id===selId);
