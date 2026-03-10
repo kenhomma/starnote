@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>★ StarNote</title>
+<title>✦ Constellation</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
@@ -139,9 +139,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 <body>
 <div id="hdr">
   <div class="logo">
-    <span class="logo-star">★</span>
-    StarNote
-    <span class="logo-sub">β — 星のメモ</span>
+    <span class="logo-star">✦</span>
+    Constellation
+    <span class="logo-sub">β — 無意識の星座</span>
   </div>
   <button class="hbtn" onclick="activateAdd()">＋ 追加</button>
   <button class="hbtn" id="btn-conn" onclick="toggleConn()">🔗 接続</button>
@@ -218,7 +218,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 <script>
 const PAL=['#b8a0ff','#7dd3fc','#f9a8d4','#4ade80','#fb923c','#facc15','#94a3b8'];
 const TICON={memo:'📝',todo:'☑',idea:'💡',goal:'🎯',link:'🔗'};
-const SK='starnote_v1';
+const SK='constellation_v1';
 let nodes=[],edges=[],selId=null,mode='normal',connSrc=null,addGxy={x:300,y:300};
 let CG=null,CZ=d3.zoomIdentity,dragLine=null,edgeSel=null,nodeSel=null,W=0,H=0;
 
@@ -330,26 +330,17 @@ function buildGraph(){
   const g=svg.append('g');
   CG=g;
   svg.call(d3.zoom().scaleExtent([.08,6]).on('zoom',e=>{g.attr('transform',e.transform);CZ=e.transform;}));
-  let lastTap=0;
-  svg.on('dblclick.add',e=>{
-    if(mode==='connect')return;
-    const [cx,cy]=d3.pointer(e,svg.node());
-    const [gx,gy]=CZ.invert([cx,cy]);
-    showAddPop(gx,gy,cx,cy+52);
-    e.stopPropagation();
-  });
-  svg.on('touchend.add',e=>{
-    if(mode==='connect')return;
-    const now=Date.now();
-    if(now-lastTap<300){
-      const t=e.changedTouches[0];
-      const [gx,gy]=CZ.invert([t.clientX,t.clientY-52]);
-      showAddPop(gx,gy,t.clientX,t.clientY);
-      e.preventDefault();
+  // 背景クリック: SB閉じる or 追加ポップアップ
+  svg.on('click.bg', e=>{
+    if(mode==='connect') return;
+    if(document.getElementById('sb').classList.contains('open')){
+      closeSB(); return;
     }
-    lastTap=now;
+    const [cx,cy] = d3.pointer(e, svg.node());
+    const [gx,gy] = CZ.invert([cx,cy]);
+    showAddPop(gx, gy, cx, cy+52);
   });
-  renderAll(g);
+    renderAll(g);
 }
 
 function renderAll(g){
@@ -426,7 +417,7 @@ function renderAll(g){
       if(mode==='connect')return;
       selId=d.id;
       propagate(d.id);
-      setTimeout(()=>{if(selId===d.id)openSB(d);},700);
+      setTimeout(()=>{ if(selId===d.id && document.getElementById('sb').classList.contains('open')===false) openSB(d); },400);
     });
 
   nodeSel.append('circle').attr('class','glo')
@@ -486,7 +477,7 @@ function confirmAdd(){
     color:col,size:28,x:addGxy.x,y:addGxy.y,remind:[]};
   nodes.push(nd);
   save();renderAll(CG);cancelAdd();
-  toast('⭐ 追加しました');
+  toast('✦ 追加しました');
   setTimeout(()=>{selId=nd.id;openSB(nd);},350);
 }
 document.getElementById('add-in').addEventListener('keydown',e=>{
@@ -522,7 +513,7 @@ function openSB(d){
   renderConns(d);
 }
 function closeSB(){
-  // 先に保存データ確定、その後でselIdをnullにしてclose
+  // 保存
   if(selId){
     const nd=nodes.find(n=>n.id===selId);
     if(nd){
@@ -532,9 +523,12 @@ function closeSB(){
       save();
     }
   }
+  // selIdを先にnullにしてからDOM操作（renderAllを呼ばない）
   selId=null;
-  document.getElementById('sb').classList.remove('open');
-  renderAll(CG);
+  const sb=document.getElementById('sb');
+  sb.classList.remove('open');
+  // selected classだけ消す（full re-renderしない）
+  d3.selectAll('g.snode').classed('sel',false);
 }
 function saveSB(){
   if(!selId)return;
@@ -620,7 +614,7 @@ function schedReminder(nodeId,dtStr,title){
     toast(`🔔 ${title}`);
     glowNode(nodeId,1,0);
     if('Notification' in window&&Notification.permission==='granted'){
-      new Notification('⭐ StarNote',{body:title});
+      new Notification('⭐ Constellation',{body:title});
     }
   },ms);
 }
@@ -653,7 +647,7 @@ function removeEdge(edgeId){
 
 // ── EXPORT/IMPORT ──
 function exportAll(){
-  let md='# ⭐ StarNote\n\n> Export: '+new Date().toLocaleString('ja')+'\n\n---\n\n';
+  let md='# ⭐ Constellation\n\n> Export: '+new Date().toLocaleString('ja')+'\n\n---\n\n';
   nodes.forEach(nd=>{
     const ic=TICON[nd.type]||'📝';
     md+=`## ${ic} ${nd.title}${nd.done?' ✓':''}\n\n`;
@@ -665,7 +659,7 @@ function exportAll(){
     if(conns.length)md+=`\n**接続先**: ${conns.join(', ')}\n`;
     md+='\n---\n\n';
   });
-  dl(md,'starnote_'+Date.now()+'.md');
+  dl(md,'constellation_'+Date.now()+'.md');
   toast('📄 エクスポートしました');
 }
 function dlNodeMD(){
