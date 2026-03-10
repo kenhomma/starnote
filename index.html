@@ -490,9 +490,11 @@ function confirmAdd(){
   setTimeout(()=>{selId=nd.id;openSB(nd);},350);
 }
 document.getElementById('add-in').addEventListener('keydown',e=>{
-  if(e.key==='Enter')confirmAdd();
-  if(e.key==='Escape')cancelAdd();
+  if(e.key==='Enter') confirmAdd();
+  if(e.key==='Escape') cancelAdd();
 });
+// addpop外タップで閉じる
+document.getElementById('addpop').addEventListener('click', e=>e.stopPropagation());
 
 // ── SIDEBAR ──
 function openSB(d){
