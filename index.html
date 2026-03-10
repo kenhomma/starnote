@@ -36,7 +36,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 #cvs svg{width:100%;height:100%}
 .edge-line{stroke-linecap:round;pointer-events:stroke;cursor:pointer}
 .edge-line:hover{stroke-opacity:.65!important;stroke-width:2.5!important}
-.snode{cursor:pointer}
+.snode{cursor:pointer;animation:nodeFloat 6s ease-in-out infinite}
+.snode:nth-child(2n){animation-duration:7.3s;animation-delay:-2.1s}
+.snode:nth-child(3n){animation-duration:5.8s;animation-delay:-3.7s}
+.snode:nth-child(4n){animation-duration:8.1s;animation-delay:-1.2s}
+.snode:nth-child(5n){animation-duration:6.6s;animation-delay:-4.8s}
+@keyframes nodeFloat{
+  0%,100%{transform-origin:center;filter:drop-shadow(0 0 4px currentColor)}
+  25%{transform:translate(0,-2.5px);filter:drop-shadow(0 0 8px currentColor)}
+  75%{transform:translate(0,2px);filter:drop-shadow(0 0 3px currentColor)}
+}
+.snode.is-dragging{animation:none}
 .snode .glo{fill-opacity:.1;pointer-events:none}
 .snode .core{transition:r .22s}
 .snode .rim{fill:none;stroke-width:1.3;opacity:.38;pointer-events:none}
@@ -45,17 +55,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 .snode.done .lbl{fill:var(--ok)!important}
 .snode.done .core{fill-opacity:.4!important}
 .snode.sel .rim{opacity:1;stroke-width:2.8;filter:drop-shadow(0 0 7px var(--accent))}
+.snode.snap-target .core{filter:drop-shadow(0 0 12px #fff);stroke:#fff;stroke-width:2}
+.snode.snap-target .rim{opacity:1;stroke-width:3;stroke:var(--accent3);animation:snapPulse .4s ease-in-out infinite alternate}
+@keyframes snapPulse{from{opacity:.6}to{opacity:1}}
 .drag-ln{stroke:var(--accent);stroke-width:1.6;stroke-dasharray:5 4;opacity:.5;pointer-events:none}
 #sb{position:fixed;top:52px;right:0;bottom:0;width:310px;
-  background:var(--s1);border-left:1px solid var(--b1);
+  background:#111120;border-left:1px solid #2a2a45;
   display:flex;flex-direction:column;
   transform:translateX(100%);transition:transform .38s cubic-bezier(.22,.88,.36,1);z-index:150;}
 #sb.open{transform:none}
 #sb-hd{padding:13px 14px 11px;border-bottom:1px solid var(--b1);
   display:flex;align-items:center;gap:8px;}
 .sdot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
-#sb-ttl{flex:1;background:none;border:none;outline:none;font-size:14px;font-weight:700;
-  color:var(--text);font-family:'Noto Sans JP',sans-serif;}
+#sb-ttl{flex:1;background:none;border:none;outline:none;font-size:15px;font-weight:700;
+  color:#f0f0ff;font-family:'Noto Sans JP',sans-serif;}
 #sb-x{background:none;border:none;color:var(--dim);font-size:22px;cursor:pointer;
   line-height:1;padding:1px 4px;transition:color .15s}
 #sb-x:hover{color:var(--text)}
@@ -63,9 +76,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 #sb-bd::-webkit-scrollbar{width:3px}
 #sb-bd::-webkit-scrollbar-thumb{background:var(--b2)}
 .sf{display:flex;flex-direction:column;gap:6px}
-.sf label{font-size:9.5px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
-#sb-body{width:100%;min-height:120px;background:var(--s2);border:1px solid var(--b1);
-  border-radius:var(--r);color:var(--text);font-size:12.5px;line-height:1.75;
+.sf label{font-size:9.5px;letter-spacing:.1em;color:#8888cc;text-transform:uppercase;font-weight:700}
+#sb-body{width:100%;min-height:120px;background:#0e0e1c;border:1px solid #2a2a45;
+  border-radius:var(--r);color:#e8eaf6;font-size:13px;line-height:1.85;
   padding:10px;resize:vertical;outline:none;font-family:'Noto Sans JP',sans-serif;}
 #sb-body:focus{border-color:var(--accent)}
 .row{display:flex;gap:8px;align-items:center}
@@ -100,8 +113,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   background:var(--s2);border:1px solid var(--b1);border-radius:5px;padding:5px 9px;font-size:11px;}
 .citem button{background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;margin-left:auto}
 #sb-ft{padding:11px 14px;border-top:1px solid var(--b1);display:flex;gap:7px}
-.fact{flex:1;background:none;border:1px solid var(--b2);border-radius:6px;
-  color:var(--dim);font-size:10px;padding:8px 4px;cursor:pointer;text-align:center;
+.fact{flex:1;background:none;border:1px solid #2a2a45;border-radius:6px;
+  color:#9090cc;font-size:10px;padding:8px 4px;cursor:pointer;text-align:center;
   font-family:'Space Mono',monospace;transition:all .18s}
 .fact:hover{border-color:var(--accent);color:var(--accent)}
 .fact.danger:hover{border-color:var(--danger);color:var(--danger)}
@@ -217,6 +230,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 <input type="file" id="md-in" accept=".md" style="display:none" onchange="onImport(event)">
 <script>
 const PAL=['#b8a0ff','#7dd3fc','#f9a8d4','#4ade80','#fb923c','#facc15','#94a3b8'];
+
+// 擬似3D: z値でスケール・不透明度を変える
+// z=-400(奥)〜+400(手前)、基準0
+function zScale(d){ return 0.55 + 0.45*((d.z||0)+400)/800; } // 0.55〜1.0
+function zOpacity(d){ return 0.35 + 0.55*((d.z||0)+400)/800; } // 0.35〜0.90
+function zR(d){ return (d.size||28)*zScale(d); }
 const TICON={memo:'📝',todo:'☑',idea:'💡',goal:'🎯',link:'🔗'};
 const SK='constellation_v1';
 let nodes=[],edges=[],selId=null,mode='normal',connSrc=null,addGxy={x:300,y:300};
@@ -268,7 +287,7 @@ function glowNode(id,intensity=0.85,delay=0){
   setTimeout(()=>{
     const nd=nodes.find(n=>n.id===id);
     if(!nd||!CG)return;
-    const r=nd.size||28,dur=180+intensity*170;
+    const r=zR(nd),dur=180+intensity*170;
     d3.selectAll('g.snode').filter(d=>d.id===id).select('.core')
       .interrupt()
       .transition().duration(dur).ease(d3.easeSinInOut)
@@ -345,6 +364,10 @@ function buildGraph(){
 
 function renderAll(g){
   g.selectAll('.eg,.ng').remove();
+  // zなしノードに初期値付与
+  nodes.forEach(n=>{if(n.z===undefined)n.z=(Math.random()-.5)*320;});
+  // z順ソート（奥→手前）
+  nodes.sort((a,b)=>(a.z||0)-(b.z||0));
   // edges
   edgeSel=g.append('g').attr('class','eg')
     .selectAll('line').data(edges).enter().append('line')
@@ -378,6 +401,7 @@ function renderAll(g){
         }
         ev.sourceEvent?.stopPropagation?.();
         d._drag=true;d._mv=false;
+        d3.select(this).classed('is-dragging',true);
       })
       .on('drag',(ev,d)=>{
         if(mode==='connect'){
@@ -389,9 +413,13 @@ function renderAll(g){
           dragLine.attr('x2',gx).attr('y2',gy);
           return;
         }
-        d._mv=true;d.x=ev.x;d.y=ev.y;
+        d._mv=true; d.x=ev.x; d.y=ev.y;
         d3.select(this).attr('transform',`translate(${d.x},${d.y})`);
         syncEdges();
+        // ドラッグ中: 近いノードをハイライト
+        const snap = nodes.find(n=>n.id!==d.id && Math.hypot(n.x-d.x,n.y-d.y)<zR(n)+zR(d)+8);
+        d3.selectAll('g.snode').classed('snap-target', n=>n.id===(snap?snap.id:null));
+        d._snapTarget = snap ? snap.id : null;
       })
       .on('end',(ev,d)=>{
         if(mode==='connect'){
@@ -400,7 +428,7 @@ function renderAll(g){
           const cx=src.clientX||(src.changedTouches&&src.changedTouches[0]?.clientX)||0;
           const cy=(src.clientY||(src.changedTouches&&src.changedTouches[0]?.clientY)||52)-52;
           const [gx,gy]=CZ.invert([cx,cy]);
-          const tgt=nodes.find(n=>n.id!==connSrc&&Math.hypot(n.x-gx,n.y-gy)<(n.size||28)+15);
+          const tgt=nodes.find(n=>n.id!==connSrc&&Math.hypot(n.x-gx,n.y-gy)<zR(n)+15);
           if(tgt&&connSrc&&!edges.find(e=>(e.src===connSrc&&e.tgt===tgt.id)||(e.src===tgt.id&&e.tgt===connSrc))){
             edges.push({id:'e'+Date.now(),src:connSrc,tgt:tgt.id});
             save();renderAll(CG);propagate(connSrc);toast('🔗 接続しました');
@@ -408,7 +436,22 @@ function renderAll(g){
           connSrc=null;return;
         }
         d._drag=false;
-        if(d._mv)save();
+        d3.select(this).classed('is-dragging',false);
+        // ドラッグ終了: スナップ接続
+        d3.selectAll('g.snode').classed('snap-target', false);
+        if(d._snapTarget){
+          const tid=d._snapTarget; d._snapTarget=null;
+          if(!edges.find(e=>(e.src===d.id&&e.tgt===tid)||(e.src===tid&&e.tgt===d.id))){
+            edges.push({id:'e'+Date.now(),src:d.id,tgt:tid});
+            save(); renderAll(CG);
+            propagate(d.id);
+            toast('🔗 接続しました');
+          } else {
+            if(d._mv) save();
+          }
+        } else {
+          if(d._mv) save();
+        }
       })
     )
     .on('click',(ev,d)=>{
@@ -421,22 +464,23 @@ function renderAll(g){
     });
 
   nodeSel.append('circle').attr('class','glo')
-    .attr('r',d=>(d.size||28)*1.75).attr('fill',d=>d.color||PAL[0]);
+    .attr('r',d=>zR(d)*1.7).attr('fill',d=>d.color||PAL[0]).attr('fill-opacity',d=>zOpacity(d)*0.12);
   nodeSel.append('circle').attr('class','core')
-    .attr('r',d=>d.size||28).attr('fill',d=>d.color||PAL[0]).attr('fill-opacity',.78);
+    .attr('r',d=>zR(d)).attr('fill',d=>d.color||PAL[0]).attr('fill-opacity',d=>zOpacity(d));
   nodeSel.append('circle').attr('class','rim')
-    .attr('r',d=>(d.size||28)+4.5).attr('stroke',d=>d.color||PAL[0]);
+    .attr('r',d=>zR(d)+4).attr('stroke',d=>d.color||PAL[0]);
   nodeSel.filter(d=>d.done&&d.type==='todo').append('text').attr('class','ico')
-    .attr('y',1).attr('font-size',d=>(d.size||28)*.62).attr('fill','#4ade80').text('✓');
+    .attr('y',1).attr('font-size',d=>zR(d)*.62).attr('fill','#4ade80').text('✓');
   nodeSel.filter(d=>!(d.done&&d.type==='todo')).append('text').attr('class','ico')
-    .attr('y',1).attr('font-size',d=>(d.size||28)*.52).attr('fill','#fff').attr('fill-opacity',.68)
+    .attr('y',1).attr('font-size',d=>zR(d)*.52).attr('fill','#fff').attr('fill-opacity',d=>zOpacity(d)*.85)
     .text(d=>TICON[d.type]||'📝');
   nodeSel.append('text').attr('class','lbl')
-    .attr('y',d=>(d.size||28)+15).attr('fill',d=>d.color||PAL[0])
+    .attr('y',d=>zR(d)+14).attr('fill',d=>d.color||PAL[0])
+    .attr('fill-opacity',d=>Math.min(1,zOpacity(d)*1.2))
     .text(d=>d.title.length>13?d.title.slice(0,13)+'…':d.title);
   nodeSel.filter(d=>d.remind&&d.remind.length>0).append('circle').attr('class','rpulse')
-    .attr('cx',d=>(d.size||28)*.72).attr('cy',d=>-(d.size||28)*.72)
-    .attr('r',5).attr('fill','#f9a8d4');
+    .attr('cx',d=>zR(d)*.72).attr('cy',d=>-zR(d)*.72)
+    .attr('r',4).attr('fill','#f9a8d4');
 }
 
 function syncEdges(){
@@ -474,7 +518,7 @@ function confirmAdd(){
   if(!title)return;
   const col=PAL[Math.floor(Math.random()*PAL.length)];
   const nd={id:'n'+Date.now(),title,body:'',type:'memo',done:false,
-    color:col,size:28,x:addGxy.x,y:addGxy.y,remind:[]};
+    color:col,size:28,z:(Math.random()-.5)*320,x:addGxy.x,y:addGxy.y,remind:[]};
   nodes.push(nd);
   save();renderAll(CG);cancelAdd();
   toast('✦ 追加しました');
@@ -537,7 +581,13 @@ function saveSB(){
   nd.title=document.getElementById('sb-ttl').value.trim()||nd.title;
   nd.body=document.getElementById('sb-body').value;
   nd.type=document.getElementById('sb-type').value;
-  save();renderAll(CG);toast('💾 保存しました');
+  save();
+  toast('💾 保存しました');
+  // 保存したらウィンドウを閉じる
+  selId=null;
+  document.getElementById('sb').classList.remove('open');
+  d3.selectAll('g.snode').classed('sel',false);
+  renderAll(CG);
 }
 function toggleDone(){
   if(!selId)return;
@@ -693,7 +743,7 @@ function onImport(ev){
       const raw=m[1].replace(/[📝☑💡🎯🔗✓\s]+$/,'').trim();
       if(!raw||nodes.find(n=>n.title===raw))return;
       nodes.push({id:'n'+Date.now()+Math.random(),title:raw,body:'',type:'memo',
-        done:raw.includes('✓'),color:PAL[ci%PAL.length],size:28,x:cx,y:cy,remind:[]});
+        done:raw.includes('✓'),color:PAL[ci%PAL.length],size:28,z:(Math.random()-.5)*320,x:cx,y:cy,remind:[]});
       cx+=140;if(cx>W-100){cx=180;cy+=130;}ci++;
     });
     save();renderAll(CG);toast('📥 インポートしました');
