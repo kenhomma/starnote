@@ -387,6 +387,24 @@ function buildGraph(){
       })
   );
   // 背景クリック
+  // ゆらゆきloop: ノードをsin波で微動
+  let ft=0, floatRaf=null;
+  function floatLoop(){
+    ft+=.008;
+    d3.selectAll('g.snode').each(function(d){
+      if(d._drag) return;
+      const phase=d._fphase||(d._fphase=Math.random()*Math.PI*2);
+      const spd=d._fspd||(d._fspd=.5+Math.random()*.7);
+      const amp=1.8+Math.random()*.5;
+      const ox=(d._fxoff||(d._fxoff=(Math.random()-.5)*1.2));
+      const dy=Math.sin(ft*spd+phase)*amp;
+      const dx=Math.cos(ft*spd*.7+phase)*ox;
+      d3.select(this).attr('transform',`translate(${d.x+dx},${d.y+dy})`);
+    });
+    floatRaf=requestAnimationFrame(floatLoop);
+  }
+  floatLoop();
+
   svg.on('click.bg',e=>{
     if(mode==='connect') return;
     if(document.getElementById('sb').classList.contains('open')){
@@ -408,10 +426,25 @@ function renderAll(g){
 
 function renderEdges(g){
   const eg=g.append('g').attr('class','eg');
+  // SVG defs にグラデーション登録
+  let defs=d3.select('#g defs');
+  if(defs.empty()) defs=d3.select('#g').insert('defs',':first-child');
+  defs.selectAll('linearGradient.edgegrad').remove();
+  edges.forEach(ed=>{
+    const sn=nodes.find(n=>n.id===ed.src), tn=nodes.find(n=>n.id===ed.tgt);
+    if(!sn||!tn) return;
+    const grad=defs.append('linearGradient')
+      .attr('class','edgegrad')
+      .attr('id','eg-'+ed.id)
+      .attr('gradientUnits','userSpaceOnUse')
+      .attr('x1',sn.x).attr('y1',sn.y).attr('x2',tn.x).attr('y2',tn.y);
+    grad.append('stop').attr('offset','0%').attr('stop-color',sn.color||PAL[0]);
+    grad.append('stop').attr('offset','100%').attr('stop-color',tn.color||PAL[0]);
+  });
   eg.selectAll('line').data(edges).enter().append('line')
     .attr('class','edge')
-    .attr('stroke',d=>{const s=nodes.find(n=>n.id===d.src);return s?.color||PAL[0];})
-    .attr('stroke-width',1.4).attr('stroke-opacity',.28)
+    .attr('stroke',d=>'url(#eg-'+d.id+')')
+    .attr('stroke-width',2).attr('stroke-opacity',.55)
     .attr('x1',d=>nodes.find(n=>n.id===d.src)?.x||0)
     .attr('y1',d=>nodes.find(n=>n.id===d.src)?.y||0)
     .attr('x2',d=>nodes.find(n=>n.id===d.tgt)?.x||0)
@@ -448,29 +481,30 @@ function renderNodes(g){
         d3.selectAll('g.snode').filter(n=>n.id===d.id)
           .attr('transform',`translate(${d.x},${d.y})`);
         syncEdges();
-        // スナップハイライト
+        // 重なったノードを検出
         const r=nodeR(d.id);
         const snap=nodes.find(n=>{
           if(n.id===d.id) return false;
-          const nr=nodeR(n.id);
-          return Math.hypot(n.x-d.x,n.y-d.y)<r+nr+12;
+          return Math.hypot(n.x-d.x,n.y-d.y)<r+nodeR(n.id)+6;
         });
         d3.selectAll('g.snode').classed('snap',n=>snap?n.id===snap.id:false);
-        d._snap=snap?snap.id:null;
+        // 重なった瞬間に接続（離さなくてOK）
+        if(snap && snap.id!==d._lastSnap){
+          const tid=snap.id;
+          if(!edges.find(e=>(e.src===d.id&&e.tgt===tid)||(e.src===tid&&e.tgt===d.id))){
+            edges.push({id:'e'+Date.now(),src:d.id,tgt:tid});
+            save(); renderAll(CG); propagate(d.id);
+            toast('🔗 接続しました');
+          }
+          d._lastSnap=tid;
+        } else if(!snap){
+          d._lastSnap=null;
+        }
       })
       .on('end',(ev,d)=>{
         d3.selectAll('g.snode').classed('dragging',false).classed('snap',false);
-        // スナップ接続
-        if(d._snap){
-          const tid=d._snap; d._snap=null;
-          if(!edges.find(e=>(e.src===d.id&&e.tgt===tid)||(e.src===tid&&e.tgt===d.id))){
-            edges.push({id:'e'+Date.now(),src:d.id,tgt:tid});
-            toast('🔗 接続しました');
-          }
-          save(); renderAll(CG); propagate(d.id);
-        } else {
-          if(d._mv) save();
-        }
+        d._lastSnap=null;
+        if(d._mv) save();
       })
     )
     .on('click',(ev,d)=>{
@@ -543,6 +577,13 @@ function syncEdges(){
     .attr('y1',d=>nodes.find(n=>n.id===d.src)?.y||0)
     .attr('x2',d=>nodes.find(n=>n.id===d.tgt)?.x||0)
     .attr('y2',d=>nodes.find(n=>n.id===d.tgt)?.y||0);
+  // グラデーション座標も更新
+  edges.forEach(ed=>{
+    const sn=nodes.find(n=>n.id===ed.src), tn=nodes.find(n=>n.id===ed.tgt);
+    if(!sn||!tn) return;
+    d3.select('#eg-'+ed.id)
+      .attr('x1',sn.x).attr('y1',sn.y).attr('x2',tn.x).attr('y2',tn.y);
+  });
 }
 
 /* ═══ CONNECT MODE (旧モード、スナップで不要だが一応残す) ═══ */
@@ -616,6 +657,7 @@ function closeSB(){
   selId=null;
   document.getElementById('sb').classList.remove('open');
   d3.selectAll('g.snode').classed('sel',false);
+  renderAll(CG);
 }
 function saveSB(){
   _doSave();
