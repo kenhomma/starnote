@@ -541,7 +541,7 @@ function attachDrag(sel){
       .on('start',function(ev,d){
         ev.sourceEvent?.stopPropagation?.();
         d._dragging=true; d._mv=false;
-        d._lastSnap=null; d._snapId=null;
+        d._lastSnap=null; d._snapId=null; d._unsnapId=null;
         // ドラッグ中はfloatを止め、正確な位置に固定
         d3.select(this).attr('transform',`translate(${d.x},${d.y})`).raise();
       })
@@ -553,25 +553,22 @@ function attachDrag(sel){
         updateEdgePositions();
         updateGradientCoords();
 
-        // 距離が離れたときだけ少し引っ張る（自然なゴム紐感）
-        const SLACK=120; // この距離を超えたら引き始める
-        const PULL=0.06; // 引きの強さ（弱め）
-        edges.filter(e=>e.src===d.id||e.tgt===d.id).forEach(e=>{
-          const nb=nodes.find(n=>n.id===(e.src===d.id?e.tgt:e.src)); if(!nb)return;
-          const dx=d.x-nb.x, dy=d.y-nb.y, dist=Math.hypot(dx,dy)||1;
-          if(dist>SLACK){
-            const over=dist-SLACK; // SLACKを超えた分だけ
-            nb.x+=dx/dist*over*PULL;
-            nb.y+=dy/dist*over*PULL;
-            nodeG.selectAll('g.nd').filter(n=>n.id===nb.id)
-              .attr('transform',`translate(${nb.x},${nb.y})`);
-          }
+        // スナップ判定を先に行う（隣接ノードの移動前座標で判定）
+        const r=nodeR(d.id);
+        // 接続済みノードはスナップ判定から除外（トグル誤動作を防ぐ）
+        const connectedIds=new Set(edges.filter(e=>e.src===d.id||e.tgt===d.id)
+          .map(e=>e.src===d.id?e.tgt:e.src));
+        const snap=nodes.find(n=>{
+          if(n.id===d.id||connectedIds.has(n.id))return false;
+          return Math.hypot(n.x-d.x,n.y-d.y)<r+nodeR(n.id)+10;
         });
 
-        // スナップ判定
-        const snap=nodes.find(n=>{
-          if(n.id===d.id)return false;
-          return Math.hypot(n.x-d.x,n.y-d.y)<r+nodeR(n.id)+10;
+        // 接続済み隣接ノードをじわっと動かす（移動量の4%だけ追随）
+        connectedIds.forEach(cid=>{
+          const nb=nodes.find(n=>n.id===cid); if(!nb)return;
+          nb.x+=ev.dx*0.04; nb.y+=ev.dy*0.04;
+          nodeG.selectAll('g.nd').filter(n=>n.id===cid)
+            .attr('transform',`translate(${nb.x},${nb.y})`);
         });
         nodeG.selectAll('g.nd').each(function(n){
           const isSnap=snap&&n.id===snap.id;
@@ -581,26 +578,35 @@ function attachDrag(sel){
           d3.select(this).select('.rim').attr('opacity',isSnap?1:.35);
         });
 
+        // 新規接続: 未接続ノードに重ねる
         if(snap){
-          const tid=snap.id;
-          if(tid!==d._snapId){
-            // 新しいノードに入った
-            d._snapId=tid;
-            const already=edges.find(e=>(e.src===d.id&&e.tgt===tid)||(e.src===tid&&e.tgt===d.id));
-            if(!already){
-              // 接続
-              edges.push({id:'e'+Date.now(),src:d.id,tgt:tid});
-              save(); rebuildGradients(); updateEdgeDOM(); refreshNodeSizes();
-              propagate(d.id); toast('🔗 接続しました');
-            } else {
-              // 解除（src/tgtどちらでも）
-              edges=edges.filter(e=>e.id!==already.id);
+          if(snap.id!==d._snapId){
+            d._snapId=snap.id;
+            edges.push({id:'e'+Date.now(),src:d.id,tgt:snap.id});
+            save(); rebuildGradients(); updateEdgeDOM(); refreshNodeSizes();
+            propagate(d.id); toast('🔗 接続しました');
+          }
+        } else {
+          d._snapId=null;
+        }
+
+        // 解除: 接続済みノードに重ねる（別判定）
+        const unsnap=nodes.find(n=>{
+          if(n.id===d.id||!connectedIds.has(n.id))return false;
+          return Math.hypot(n.x-d.x,n.y-d.y)<r+nodeR(n.id)+10;
+        });
+        if(unsnap){
+          if(unsnap.id!==d._unsnapId){
+            d._unsnapId=unsnap.id;
+            const ed=edges.find(e=>(e.src===d.id&&e.tgt===unsnap.id)||(e.src===unsnap.id&&e.tgt===d.id));
+            if(ed){
+              edges=edges.filter(e=>e.id!==ed.id);
               save(); rebuildGradients(); updateEdgeDOM(); refreshNodeSizes();
               toast('🔗 解除しました');
             }
           }
         } else {
-          d._snapId=null;
+          d._unsnapId=null;
         }
       })
       .on('end',function(ev,d){
