@@ -104,6 +104,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 #toast.up{transform:translateX(-50%) translateY(0)}
 .rpulse{animation:rp 2s ease-in-out infinite}
 @keyframes rp{0%,100%{opacity:.9}50%{opacity:.2}}
+/* オフスクリーンインジケーター */
+#indicators{position:fixed;top:50px;left:0;right:0;bottom:0;pointer-events:none;z-index:100}
+.ind{position:absolute;width:0;height:0;opacity:.75;transition:opacity .3s;pointer-events:none}
 </style>
 </head>
 <body>
@@ -115,6 +118,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   <button class="hbtn danger" onclick="clearAll()">✕</button>
 </div>
 <div id="cvs"><svg id="g"></svg></div>
+<div id="indicators"></div>
 <div id="addpop">
   <input id="add-in" placeholder="タイトルを入力..." maxlength="40" autocomplete="off"/>
   <div class="prow">
@@ -474,6 +478,7 @@ function buildGraph(){
   buildNodes();
   updateEdgeDOM();
   startFloat();
+  startIndicators();
 }
 
 /* ════════════════════════════════════════
@@ -841,6 +846,87 @@ function clearAll(){
   document.getElementById('sb').classList.remove('open'); selId=null;
   nodeG&&nodeG.selectAll('g.nd').remove();
   rebuildGradients(); updateEdgeDOM(); toast('🗑 全消去しました');
+}
+
+/* ════════════════════════════════════════
+   OFFSCREEN INDICATORS
+════════════════════════════════════════ */
+let indRaf=null;
+function startIndicators(){
+  if(indRaf){cancelAnimationFrame(indRaf);indRaf=null;}
+  const cont=document.getElementById('indicators');
+  // インジケーターDOMを最大40個プール
+  const pool=[];
+  for(let i=0;i<40;i++){
+    const el=document.createElement('canvas');
+    el.style.cssText='position:absolute;pointer-events:none;opacity:0;transition:opacity .25s';
+    el.width=28;el.height=28;
+    cont.appendChild(el);
+    pool.push(el);
+  }
+  function update(){
+    const margin=56; // ヘッダー高さ + 余白
+    const VW=window.innerWidth, VH=window.innerHeight;
+    const cx=VW/2, cy=(VH+50)/2; // 画面中心（ヘッダー込み）
+    let pi=0;
+    nodes.forEach(nd=>{
+      // グラフ座標→スクリーン座標
+      const sx=nd.x*CZ.k+CZ.x, sy=nd.y*CZ.k+CZ.y+50;
+      const r=nodeR(nd.id)*CZ.k;
+      const inView=sx+r>0&&sx-r<VW&&sy+r>50&&sy-r<VH;
+      if(inView||pi>=pool.length)return;
+      const el=pool[pi++];
+      // 画面端への方向ベクトル
+      const dx=sx-cx, dy=sy-cy;
+      const angle=Math.atan2(dy,dx);
+      // 端にクランプした座標
+      const edgePad=22;
+      let ex=cx+Math.cos(angle)*9999, ey=cy+Math.sin(angle)*9999;
+      // 画面矩形との交点
+      const slopes=[
+        (ey>50?( (50+edgePad)-cy)/dy:Infinity),
+        ((VH-edgePad-cy)/dy),
+        (((edgePad)-cx)/dx),
+        (((VW-edgePad)-cx)/dx)
+      ].filter(t=>t>0);
+      const t=Math.min(...slopes);
+      ex=cx+Math.cos(angle)*dx/Math.hypot(dx,dy)*Math.hypot(dx*t,dy*t);
+      ey=cy+Math.sin(angle)*dy/Math.hypot(dx,dy)*Math.hypot(dx*t,dy*t);
+      // より単純な計算
+      const len=Math.min(
+        Math.abs(dx)>0.01?(dx>0?VW-edgePad-cx:cx-edgePad)/Math.abs(Math.cos(angle)):Infinity,
+        Math.abs(dy)>0.01?(dy>0?VH-edgePad-cy:cy-edgePad-(50))/Math.abs(Math.sin(angle)):Infinity
+      );
+      const fx=cx+Math.cos(angle)*len;
+      const fy=cy+Math.sin(angle)*len;
+      el.style.left=(fx-14)+'px';
+      el.style.top=(fy-14)+'px';
+      el.style.opacity='.8';
+      // Canvas描画: 三角矢印 + ノードカラー
+      const ctx=el.getContext('2d');
+      ctx.clearRect(0,0,28,28);
+      ctx.save();
+      ctx.translate(14,14);
+      ctx.rotate(angle);
+      // 矢印三角形
+      ctx.beginPath();
+      ctx.moveTo(10,0);ctx.lineTo(-5,-7);ctx.lineTo(-5,7);ctx.closePath();
+      ctx.fillStyle=nd.color||'#b8a0ff';
+      ctx.shadowColor=nd.color||'#b8a0ff';
+      ctx.shadowBlur=8;
+      ctx.fill();
+      // 中心ドット
+      ctx.beginPath();ctx.arc(-8,0,2.5,0,Math.PI*2);
+      ctx.fillStyle='#fff';ctx.shadowBlur=0;ctx.fill();
+      ctx.restore();
+    });
+    // 使わなかったものを非表示
+    for(let i=pi;i<pool.length;i++){
+      pool[i].style.opacity='0';
+    }
+    indRaf=requestAnimationFrame(update);
+  }
+  update();
 }
 
 /* ════════════════════════════════════════
