@@ -553,60 +553,43 @@ function attachDrag(sel){
         updateEdgePositions();
         updateGradientCoords();
 
-        // スナップ判定を先に行う（隣接ノードの移動前座標で判定）
+        // 隣接ノードをじわっと追随（移動量の4%）
         const r=nodeR(d.id);
-        // 接続済みノードはスナップ判定から除外（トグル誤動作を防ぐ）
-        const connectedIds=new Set(edges.filter(e=>e.src===d.id||e.tgt===d.id)
-          .map(e=>e.src===d.id?e.tgt:e.src));
-        const snap=nodes.find(n=>{
-          if(n.id===d.id||connectedIds.has(n.id))return false;
-          return Math.hypot(n.x-d.x,n.y-d.y)<r+nodeR(n.id)+10;
-        });
-
-        // 接続済み隣接ノードをじわっと動かす（移動量の4%だけ追随）
-        connectedIds.forEach(cid=>{
-          const nb=nodes.find(n=>n.id===cid); if(!nb)return;
+        edges.filter(e=>e.src===d.id||e.tgt===d.id).forEach(e=>{
+          const nb=nodes.find(n=>n.id===(e.src===d.id?e.tgt:e.src)); if(!nb)return;
           nb.x+=ev.dx*0.04; nb.y+=ev.dy*0.04;
-          nodeG.selectAll('g.nd').filter(n=>n.id===cid)
+          nodeG.selectAll('g.nd').filter(n=>n.id===nb.id)
             .attr('transform',`translate(${nb.x},${nb.y})`);
         });
-        nodeG.selectAll('g.nd').each(function(n){
-          const isSnap=snap&&n.id===snap.id;
-          d3.select(this).select('.core')
-            .attr('stroke',isSnap?'#fff':null)
-            .attr('stroke-width',isSnap?2.5:null);
-          d3.select(this).select('.rim').attr('opacity',isSnap?1:.35);
-        });
 
-        // 新規接続: 未接続ノードに重ねる
-        if(snap){
-          if(snap.id!==d._snapId){
-            d._snapId=snap.id;
-            edges.push({id:'e'+Date.now(),src:d.id,tgt:snap.id});
-            save(); rebuildGradients(); updateEdgeDOM(); refreshNodeSizes();
-            propagate(d.id); toast('🔗 接続しました');
-          }
-        } else {
-          d._snapId=null;
-        }
-
-        // 解除: 接続済みノードに重ねる（別判定）
-        const unsnap=nodes.find(n=>{
-          if(n.id===d.id||!connectedIds.has(n.id))return false;
+        // スナップ判定（接続済み・未接続どちらも対象）
+        const snap=nodes.find(n=>{
+          if(n.id===d.id)return false;
           return Math.hypot(n.x-d.x,n.y-d.y)<r+nodeR(n.id)+10;
         });
-        if(unsnap){
-          if(unsnap.id!==d._unsnapId){
-            d._unsnapId=unsnap.id;
-            const ed=edges.find(e=>(e.src===d.id&&e.tgt===unsnap.id)||(e.src===unsnap.id&&e.tgt===d.id));
-            if(ed){
-              edges=edges.filter(e=>e.id!==ed.id);
+        nodeG.selectAll('g.nd').each(function(n){
+          const on=snap&&n.id===snap.id;
+          d3.select(this).select('.core').attr('stroke',on?'#fff':null).attr('stroke-width',on?2.5:null);
+          d3.select(this).select('.rim').attr('opacity',on?1:.35);
+        });
+
+        // 重なったノードが変わったときだけ接続/解除を発火
+        const snapId=snap?snap.id:null;
+        if(snapId!==d._snapId){
+          if(snapId){
+            // 新しいノードに入った → 接続/解除トグル
+            const already=edges.find(e=>(e.src===d.id&&e.tgt===snapId)||(e.src===snapId&&e.tgt===d.id));
+            if(!already){
+              edges.push({id:'e'+Date.now(),src:d.id,tgt:snapId});
+              save(); rebuildGradients(); updateEdgeDOM(); refreshNodeSizes();
+              propagate(d.id); toast('🔗 接続しました');
+            } else {
+              edges=edges.filter(e=>e.id!==already.id);
               save(); rebuildGradients(); updateEdgeDOM(); refreshNodeSizes();
               toast('🔗 解除しました');
             }
           }
-        } else {
-          d._unsnapId=null;
+          d._snapId=snapId;
         }
       })
       .on('end',function(ev,d){
