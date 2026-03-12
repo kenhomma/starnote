@@ -417,13 +417,30 @@ function buildGraph(){
   G=SVG.append('g');
 
   // zoom（慣性つき）
-  ZOOM=d3.zoom().scaleExtent([.05,8]).on('zoom',e=>{
-    G.attr('transform',e.transform);
-    CZ=e.transform; curScale=e.transform.k;
-    // ラベルサイズ維持
-    d3.selectAll('.lbl').attr('font-size',Math.round(12/curScale));
-  });
+  ZOOM=d3.zoom().scaleExtent([.05,8])
+    .on('zoom',e=>{
+      G.attr('transform',e.transform);
+      CZ=e.transform; curScale=e.transform.k;
+      d3.selectAll('.lbl').attr('font-size',Math.round(12/curScale));
+      // 視差: 星空をズームの逆方向に少しだけ動かす
+      if(starsG){
+        const px=e.transform.x*0.04, py=e.transform.y*0.04;
+        const sc=1+(e.transform.k-1)*0.06; // スケール変化の6%だけ星が拡縮
+        starsG.attr('transform',`translate(${px},${py}) scale(${sc})`);
+      }
+    });
   SVG.call(ZOOM);
+
+  // ズーム制約: 全ノードが常に画面内に収まるようにtranslateExtentを動的更新
+  function constrainZoom(){
+    if(!nodes.length){ZOOM.translateExtent([[-W,-H],[2*W,2*H]]);return;}
+    const pad=80;
+    const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y);
+    const x0=Math.min(...xs)-pad, y0=Math.min(...ys)-pad;
+    const x1=Math.max(...xs)+pad, y1=Math.max(...ys)+pad;
+    ZOOM.translateExtent([[x0,y0],[x1,y1]]);
+    SVG.call(ZOOM); // 制約を即時適用
+  }
 
   // 慣性スクロール
   {
@@ -474,6 +491,7 @@ function buildGraph(){
   buildNodes();
   updateEdgeDOM();
   startFloat();
+  constrainZoom();
 }
 
 /* ════════════════════════════════════════
@@ -598,7 +616,7 @@ function attachDrag(sel){
           d3.select(this).select('.core').attr('stroke',null).attr('stroke-width',null);
           d3.select(this).select('.rim').attr('opacity',.35);
         });
-        if(d._mv){save();updateEdgePositions();}
+        if(d._mv){save();updateEdgePositions();constrainZoom();}
       })
   );
 }
@@ -643,7 +661,7 @@ function confirmAdd(){
   const entered=existing.enter().append('g')
     .attr('class','nd').attr('transform',`translate(${nd.x},${nd.y})`);
   attachDrag(entered); attachClick(entered); drawNodeShapes(entered);
-  save(); cancelAdd(); toast('✦ 追加しました');
+  save(); cancelAdd(); constrainZoom(); toast('✦ 追加しました');
   setTimeout(()=>{selId=nd.id;openSB(nd);},300);
 }
 document.getElementById('add-in').addEventListener('keydown',e=>{if(e.key==='Enter')confirmAdd();if(e.key==='Escape')cancelAdd();});
@@ -725,7 +743,7 @@ function delNode(){
   edges=edges.filter(e=>e.src!==selId&&e.tgt!==selId);
   save(); selId=null;
   document.getElementById('sb').classList.remove('open');
-  rebuildGradients(); updateEdgeDOM(); refreshNodeSizes();
+  rebuildGradients(); updateEdgeDOM(); refreshNodeSizes(); constrainZoom();
   toast('🗑 削除しました');
 }
 
@@ -848,13 +866,14 @@ function clearAll(){
 ════════════════════════════════════════ */
 function fitAll(){
   if(!nodes.length)return;
-  const pad=60;
+  const pad=70;
   const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y);
   const x0=Math.min(...xs)-pad, y0=Math.min(...ys)-pad;
   const x1=Math.max(...xs)+pad, y1=Math.max(...ys)+pad;
-  const cw=W, ch=H;
-  const k=Math.min(cw/(x1-x0), ch/(y1-y0), 3);
-  const tx=cw/2-k*(x0+x1)/2, ty=ch/2-k*(y0+y1)/2;
+  const k=Math.min(W/(x1-x0), H/(y1-y0), 3);
+  const tx=W/2-k*(x0+x1)/2, ty=H/2-k*(y0+y1)/2;
+  // translateExtentをfitに合わせてリセット
+  ZOOM.translateExtent([[x0-W/k,y0-H/k],[x1+W/k,y1+H/k]]);
   SVG.transition().duration(500).call(
     ZOOM.transform, d3.zoomIdentity.translate(tx,ty).scale(k)
   );
