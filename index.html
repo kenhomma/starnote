@@ -553,17 +553,19 @@ function attachDrag(sel){
         updateEdgePositions();
         updateGradientCoords();
 
-        // 隣接ノードを少し引っ張る
-        const r=nodeR(d.id);
-        const nbrs=edges.filter(e=>e.src===d.id||e.tgt===d.id)
-          .map(e=>nodes.find(n=>n.id===(e.src===d.id?e.tgt:e.src))).filter(Boolean);
-        nbrs.forEach(nb=>{
-          const dx=d.x-nb.x, dy=d.y-nb.y;
-          const dist=Math.hypot(dx,dy)||1;
-          const pull=Math.min(0.18, 60/dist*0.18); // 距離が近いほど強く引く
-          nb.x+=dx*pull; nb.y+=dy*pull;
-          nodeG.selectAll('g.nd').filter(n=>n.id===nb.id)
-            .attr('transform',`translate(${nb.x},${nb.y})`);
+        // 距離が離れたときだけ少し引っ張る（自然なゴム紐感）
+        const SLACK=120; // この距離を超えたら引き始める
+        const PULL=0.06; // 引きの強さ（弱め）
+        edges.filter(e=>e.src===d.id||e.tgt===d.id).forEach(e=>{
+          const nb=nodes.find(n=>n.id===(e.src===d.id?e.tgt:e.src)); if(!nb)return;
+          const dx=d.x-nb.x, dy=d.y-nb.y, dist=Math.hypot(dx,dy)||1;
+          if(dist>SLACK){
+            const over=dist-SLACK; // SLACKを超えた分だけ
+            nb.x+=dx/dist*over*PULL;
+            nb.y+=dy/dist*over*PULL;
+            nodeG.selectAll('g.nd').filter(n=>n.id===nb.id)
+              .attr('transform',`translate(${nb.x},${nb.y})`);
+          }
         });
 
         // スナップ判定
