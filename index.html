@@ -417,29 +417,38 @@ function buildGraph(){
   G=SVG.append('g');
 
   // zoom（慣性つき）
+  // ズーム制約: ノードが全て画面内に収まるようtranslateExtentをスケールに合わせて設定
+  // d3のtranslateExtentはスクリーン座標系で [min_tx, min_ty, max_tx, max_ty]
+  // tx範囲: -(content_right*k - W) 〜 -content_left*k + W
+  function clampExtent(){
+    if(!nodes.length) return;
+    const pad=80;
+    const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y);
+    const gx0=Math.min(...xs)-pad, gy0=Math.min(...ys)-pad;
+    const gx1=Math.max(...xs)+pad, gy1=Math.max(...ys)+pad;
+    const k=CZ.k;
+    // translateExtentはグラフ座標で渡す（d3が内部でkを掛ける）
+    ZOOM.translateExtent([[gx0,gy0],[gx1,gy1]]);
+  }
+
   ZOOM=d3.zoom().scaleExtent([.05,8])
     .on('zoom',e=>{
       G.attr('transform',e.transform);
       CZ=e.transform; curScale=e.transform.k;
       d3.selectAll('.lbl').attr('font-size',Math.round(12/curScale));
-      // 視差: 星空をズームの逆方向に少しだけ動かす
+      // 視差: 星空をパン方向に少しずれ、ズームでほんの少し拡縮
       if(starsG){
-        const px=e.transform.x*0.04, py=e.transform.y*0.04;
-        const sc=1+(e.transform.k-1)*0.06; // スケール変化の6%だけ星が拡縮
-        starsG.attr('transform',`translate(${px},${py}) scale(${sc})`);
+        const px=-(e.transform.x-W/2)*0.04;
+        const py=-(e.transform.y-H/2)*0.04;
+        const sc=1+(e.transform.k-1)*0.05;
+        starsG.attr('transform',`translate(${W/2+px},${H/2+py}) scale(${sc}) translate(${-W/2},${-H/2})`);
       }
     });
   SVG.call(ZOOM);
 
-  // ズーム制約: 全ノードが常に画面内に収まるようにtranslateExtentを動的更新
   function constrainZoom(){
-    if(!nodes.length){ZOOM.translateExtent([[-W,-H],[2*W,2*H]]);return;}
-    const pad=80;
-    const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y);
-    const x0=Math.min(...xs)-pad, y0=Math.min(...ys)-pad;
-    const x1=Math.max(...xs)+pad, y1=Math.max(...ys)+pad;
-    ZOOM.translateExtent([[x0,y0],[x1,y1]]);
-    SVG.call(ZOOM); // 制約を即時適用
+    clampExtent();
+    SVG.call(ZOOM);
   }
 
   // 慣性スクロール
@@ -866,17 +875,16 @@ function clearAll(){
 ════════════════════════════════════════ */
 function fitAll(){
   if(!nodes.length)return;
-  const pad=70;
+  const pad=80;
   const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y);
   const x0=Math.min(...xs)-pad, y0=Math.min(...ys)-pad;
   const x1=Math.max(...xs)+pad, y1=Math.max(...ys)+pad;
-  const k=Math.min(W/(x1-x0), H/(y1-y0), 3);
+  const k=Math.min(W/(x1-x0), H/(y1-y0), 2.5);
   const tx=W/2-k*(x0+x1)/2, ty=H/2-k*(y0+y1)/2;
-  // translateExtentをfitに合わせてリセット
-  ZOOM.translateExtent([[x0-W/k,y0-H/k],[x1+W/k,y1+H/k]]);
-  SVG.transition().duration(500).call(
-    ZOOM.transform, d3.zoomIdentity.translate(tx,ty).scale(k)
-  );
+  const t=d3.zoomIdentity.translate(tx,ty).scale(k);
+  // fit後の制約をセット（fitした状態がextentの基準）
+  ZOOM.translateExtent([[x0,y0],[x1,y1]]);
+  SVG.transition().duration(500).call(ZOOM.transform, t);
 }
 
 /* ════════════════════════════════════════
