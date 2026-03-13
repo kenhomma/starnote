@@ -455,19 +455,7 @@ function buildGraph(){
   // zoom（慣性つき）
   ZOOM=d3.zoom().scaleExtent([.1,3])
     .on('zoom',e=>{
-      // translateをノードBBoxにclamp
-      let {x,y,k}=e.transform;
-      if(nodes.length){
-        const pad=80;
-        const xs=nodes.map(n=>n.x), ys=nodes.map(n=>n.y);
-        const gx0=Math.min(...xs)-pad, gy0=Math.min(...ys)-pad;
-        const gx1=Math.max(...xs)+pad, gy1=Math.max(...ys)+pad;
-        // スクリーン座標でノードが全て見える範囲のtx/ty
-        const txMin=W-gx1*k, txMax=-gx0*k;
-        const tyMin=H-gy1*k, tyMax=-gy0*k;
-        x=Math.max(txMin,Math.min(txMax,x));
-        y=Math.max(tyMin,Math.min(tyMax,y));
-      }
+      const {x,y,k}=e.transform;
       const t=d3.zoomIdentity.translate(x,y).scale(k);
       G.attr('transform',t);
       CZ=t; curScale=k;
