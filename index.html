@@ -453,54 +453,68 @@ function buildGraph(){
   G=SVG.append('g');
 
   // zoom（慣性つき）
-  ZOOM=d3.zoom().scaleExtent([.1,3])
+  // ── ZOOM / PAN ──────────────────────────────
+  // D3 zoom に全て任せる。ピンチ・ホイール・ドラッグ全てD3が処理。
+  // 慣性のみ: touchend時の速度を1フレーム計測して自前で流す。
+  let _iraf=null;
+  function _stopInertia(){if(_iraf){cancelAnimationFrame(_iraf);_iraf=null;}}
+  function _applyInertia(vx,vy){
+    _stopInertia();
+    (function step(){
+      if(Math.abs(vx)<0.3&&Math.abs(vy)<0.3)return;
+      vx*=0.88; vy*=0.88;
+      // CZに速度を加算してD3に渡す
+      const nt=d3.zoomIdentity.translate(CZ.x+vx, CZ.y+vy).scale(CZ.k);
+      SVG.call(ZOOM.transform, nt);
+      _iraf=requestAnimationFrame(step);
+    })();
+  }
+
+  ZOOM=d3.zoom()
+    .scaleExtent([0.1, 3])
+    .filter(e=>{
+      // ノード上のtouchはdragに任せる（D3 zoomに横取りさせない）
+      if(e.type==='touchstart'&&e.target.closest&&e.target.closest('g.nd'))return false;
+      return !e.ctrlKey&&e.button===0||e.type==='wheel'||e.type==='touchstart'||e.type==='touchmove'||e.type==='touchend';
+    })
     .on('zoom',e=>{
       const {x,y,k}=e.transform;
-      const t=d3.zoomIdentity.translate(x,y).scale(k);
-      G.attr('transform',t);
-      CZ=t; curScale=k;
+      CZ=e.transform; curScale=k;
+      G.attr('transform',e.transform);
       d3.selectAll('.lbl').attr('font-size',Math.round(12/k));
-      // 視差: 星空
+      // 視差: 星空をパン量の4%・ズームの5%だけ動かす
       if(starsG){
-        const px=-(x-W/2)*0.04;
-        const py=-(y-H/2)*0.04;
+        const px=-(x-W/2)*0.04, py=-(y-H/2)*0.04;
         const sc=1+(k-1)*0.05;
-        starsG.attr('transform',`translate(${W/2+px},${H/2+py}) scale(${sc}) translate(${-W/2},${-H/2})`);
+        starsG.attr('transform',
+          `translate(${W/2+px},${H/2+py}) scale(${sc}) translate(${-W/2},${-H/2})`);
       }
     });
   SVG.call(ZOOM);
 
-  function constrainZoom(){ /* clamp is handled in zoom handler */ }
-
-  // 慣性スクロール
+  // touchend時に慣性を発火（D3 zoomのpan終了後）
   {
-    let vx=0,vy=0,lastX=0,lastY=0,lastT=0,panning=false,iraf=null;
-    function stopI(){if(iraf){cancelAnimationFrame(iraf);iraf=null;}}
-    function runI(){
-      stopI();
-      (function step(){
-        if(Math.abs(vx)<.15&&Math.abs(vy)<.15)return;
-        vx*=.90;vy*=.90;
-        const t=CZ.translate(vx,vy);
-        SVG.call(ZOOM.transform,t);
-        iraf=requestAnimationFrame(step);
-      })();
-    }
-    const el=document.getElementById('g');
-    el.addEventListener('pointerdown',e=>{
-      if(e.pointerType!=='mouse'&&e.target.tagName==='svg'){
-        stopI();panning=true;lastX=e.clientX;lastY=e.clientY;lastT=Date.now();vx=0;vy=0;
+    let _tx=0,_ty=0,_tt=0,_lx=0,_ly=0,_lt=0;
+    SVG.on('touchstart.inertia',e=>{
+      _stopInertia();
+      if(e.touches.length===1){
+        _lx=e.touches[0].clientX; _ly=e.touches[0].clientY; _lt=Date.now();
       }
     },{passive:true});
-    el.addEventListener('pointermove',e=>{
-      if(!panning)return;
-      const dt=Math.max(1,Date.now()-lastT);
-      vx=(e.clientX-lastX)/dt*16;vy=(e.clientY-lastY)/dt*16;
-      lastX=e.clientX;lastY=e.clientY;lastT=Date.now();
+    SVG.on('touchmove.inertia',e=>{
+      if(e.touches.length===1){
+        const dt=Math.max(1,Date.now()-_lt);
+        _tx=(e.touches[0].clientX-_lx)/dt*14;
+        _ty=(e.touches[0].clientY-_ly)/dt*14;
+        _lx=e.touches[0].clientX; _ly=e.touches[0].clientY; _lt=Date.now();
+      }
     },{passive:true});
-    el.addEventListener('pointerup',()=>{if(panning){panning=false;runI();}},{passive:true});
-    el.addEventListener('pointercancel',()=>{panning=false;},{passive:true});
+    SVG.on('touchend.inertia',e=>{
+      if(e.changedTouches.length===1&&Math.hypot(_tx,_ty)>1)_applyInertia(_tx,_ty);
+    },{passive:true});
   }
+
+  function constrainZoom(){}
 
   // 背景クリック
   SVG.on('click.bg',e=>{
